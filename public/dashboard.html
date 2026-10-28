@@ -1,63 +1,1248 @@
 <!DOCTYPE html>
-<html lang="th">
+<html lang="th" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard - LINE AI Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-</head>
-<body class="bg-gray-50 min-h-screen">
-    <nav class="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 class="text-xl font-bold text-gray-800">📊 LINE AI Admin Dashboard</h1>
-        <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600">ออกจากระบบ</button>
-    </nav>
-    <div class="max-w-6xl mx-auto mt-8 px-4">
-        <div class="bg-white rounded-xl shadow p-6 mb-6">
-            <h2 class="text-lg font-semibold mb-2 text-gray-700">สถานะระบบ</h2>
-            <p class="text-green-600 font-medium">🟢 เชื่อมต่อกับ Vercel Serverless และ Google Gemini API เรียบร้อย</p>
-        </div>
-        <div class="bg-white rounded-xl shadow p-6">
-            <h2 class="text-lg font-semibold mb-4 text-gray-700">💬 ประวัติการสนทนากับ AI ล่าสุด</h2>
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-gray-100 text-gray-600 text-sm">
-                            <th class="p-3 border-b">เวลา</th>
-                            <th class="p-3 border-b">LINE User ID</th>
-                            <th class="p-3 border-b">ข้อความลูกค้า</th>
-                            <th class="p-3 border-b">คำตอบจาก Gemini AI</th>
-                        </tr>
-                    </thead>
-                    <tbody id="log-rows" class="text-sm text-gray-700">
-                        <tr><td colspan="4" class="p-4 text-center text-gray-400">กำลังโหลดข้อมูล...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <script>
-        if(localStorage.getItem('logged_in') !== 'true') { window.location.href = '/index.html'; }
-        function logout() { localStorage.removeItem('logged_in'); window.location.href = '/index.html'; }
-
-        async function fetchLogs() {
-            try {
-                const res = await fetch('/api/logs');
-                const logs = await res.json();
-                const tbody = document.getElementById('log-rows');
-                if(logs.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">ยังไม่มีประวัติการสนทนา</td></tr>';
-                    return;
-                }
-                tbody.innerHTML = logs.map(l => `
-                    <tr class="hover:bg-gray-50">
-                        <td class="p-3 border-b text-xs text-gray-500">${new Date(l.created_at).toLocaleString()}</td>
-                        <td class="p-3 border-b font-mono text-xs">${l.line_user_id}</td>
-                        <td class="p-3 border-b">${l.user_message}</td>
-                        <td class="p-3 border-b text-blue-600">${l.ai_response}</td>
-                    </tr>
-                `).join('');
-            } catch (err) { console.error(err); }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LINE OA AI Manager & Business Analytics</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            line: {
+              DEFAULT: '#06C755',
+              hover: '#05b34c',
+              dark: '#048e3c',
+              light: '#22df6e',
+              bg: '#0a1d12'
+            },
+            dark: {
+              50: '#f6f8fa',
+              100: '#eaeef2',
+              800: '#151b23',
+              850: '#0f141a',
+              900: '#0d1117',
+              950: '#010409'
+            }
+          }
         }
-        fetchLogs();
-    </script>
+      }
+    }
+  </script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Google Fonts: Kanit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Kanit', 'Inter', sans-serif;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0d1117;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #21262d;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #30363d;
+    }
+    .line-bubble-user {
+      background-color: #06C755;
+      color: #ffffff;
+      border-radius: 18px 18px 2px 18px;
+    }
+    .line-bubble-bot {
+      background-color: #21262d;
+      color: #f0f6fc;
+      border-radius: 18px 18px 18px 2px;
+      border: 1px solid #30363d;
+    }
+  </style>
+</head>
+<body class="bg-dark-900 text-gray-100 min-h-screen flex flex-col antialiased">
+
+  <!-- ================= AUTHENTICATION CONTAINER (LOGIN / REGISTER) ================= -->
+  <div id="auth-container" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-dark-950/90 backdrop-blur-md">
+    <div class="max-w-md w-full bg-dark-850 border border-gray-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+      
+      <!-- Top Decorative Glow -->
+      <div class="absolute -top-16 -right-16 w-32 h-32 bg-line/20 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Brand Logo Header -->
+      <div class="text-center mb-6">
+        <div class="w-14 h-14 bg-line rounded-2xl mx-auto flex items-center justify-center text-white text-3xl font-bold shadow-lg shadow-line/25 mb-3">
+          <i class="fa-brands fa-line"></i>
+        </div>
+        <h2 class="text-xl font-bold text-white tracking-tight">LINE OA AI Manager</h2>
+        <p class="text-xs text-gray-400 mt-1">ระบบเข้าสู่หลังบ้านตัวจัดการ AI & วิเคราะห์ธุรกิจ</p>
+      </div>
+
+      <!-- Demo Credentials Quick Banner -->
+      <div class="mb-6 bg-line/10 border border-line/20 p-3 rounded-xl text-xs text-line flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-key"></i>
+          <span><strong>ทดสอบเข้าใช้งาน:</strong> admin / admin123</span>
+        </div>
+        <button onclick="fillDemoCredentials()" class="bg-line/20 hover:bg-line/30 text-line px-2 py-1 rounded text-[10px] font-bold">
+          กรอกให้อัตโนมัติ
+        </button>
+      </div>
+
+      <!-- Auth Error / Notice Box -->
+      <div id="auth-error" class="hidden mb-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-2">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="auth-error-msg">ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง</span>
+      </div>
+
+      <!-- FORM: LOGIN -->
+      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">ชื่อผู้ใช้ / อีเมล</label>
+          <div class="relative">
+            <i class="fa-solid fa-user absolute left-3.5 top-3 text-xs text-gray-500"></i>
+            <input type="text" id="login-username" required placeholder="admin" class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">รหัสผ่าน</label>
+          <div class="relative">
+            <i class="fa-solid fa-lock absolute left-3.5 top-3 text-xs text-gray-500"></i>
+            <input type="password" id="login-password" required placeholder="••••••••" class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line">
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-xs">
+          <label class="flex items-center gap-2 text-gray-400 cursor-pointer">
+            <input type="checkbox" id="remember-me" checked class="rounded border-gray-700 bg-dark-900 text-line focus:ring-line">
+            <span>จดจำการเข้าสู่ระบบ</span>
+          </label>
+          <a href="#" onclick="alert('โปรดติดต่อผู้ดูแลระบบเพื่อรีเซ็ตรหัสผ่าน')" class="text-line hover:underline">ลืมรหัสผ่าน?</a>
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-line hover:bg-line-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-line/20 transition flex items-center justify-center gap-2">
+          <span>เข้าสู่ระบบหลังบ้าน</span>
+          <i class="fa-solid fa-arrow-right-to-bracket"></i>
+        </button>
+      </form>
+
+      <!-- FORM: REGISTER (Hidden by default) -->
+      <form id="register-form" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">ชื่อ-นามสกุล / ชื่อร้านค้า</label>
+          <input type="text" id="reg-fullname" required placeholder="สมชาย การค้า" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">ชื่อผู้ใช้ (Username)</label>
+          <input type="text" id="reg-username" required placeholder="manager01" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">รหัสผ่าน</label>
+          <input type="password" id="reg-password" required placeholder="กำหนดรหัสผ่านอย่างน้อย 6 หลัก" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-line hover:bg-line-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-line/20 transition flex items-center justify-center gap-2">
+          <span>ลงทะเบียนผู้ใช้ใหม่</span>
+          <i class="fa-solid fa-user-plus"></i>
+        </button>
+      </form>
+
+      <!-- Auth Toggle Links -->
+      <div class="mt-6 pt-4 border-t border-gray-800 text-center text-xs text-gray-400">
+        <span id="auth-toggle-prompt">ยังไม่มีบัญชีผู้ใช้ระบบ?</span>
+        <button onclick="toggleAuthMode()" id="auth-toggle-btn" class="text-line font-bold ml-1 hover:underline">
+          ลงทะเบียนผู้ใช้ใหม่
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TOP HEADER -->
+  <header class="bg-dark-850 border-b border-gray-800 sticky top-0 z-40 px-4 py-3">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+      
+      <!-- Brand & Webhook Status -->
+      <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-line flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-line/20">
+            <i class="fa-brands fa-line text-2xl"></i>
+          </div>
+          <div>
+            <h1 class="font-semibold text-lg leading-tight flex items-center gap-2">
+              LINE OA AI Manager 
+              <span class="text-xs bg-line/20 text-line px-2 py-0.5 rounded-full border border-line/30 font-normal">PRO v2.4</span>
+            </h1>
+            <p class="text-xs text-gray-400">ระบบ AI ตอบแชทอัตโนมัติ & วิเคราะห์ธุรกิจเชิงลึก</p>
+          </div>
+        </div>
+
+        <!-- Webhook Status Indicator -->
+        <div class="flex items-center gap-2 bg-dark-800 px-3 py-1.5 rounded-full border border-gray-700/60 text-xs">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-line opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-line"></span>
+          </span>
+          <span class="text-gray-300 font-medium">Webhook: <span class="text-line">Connected</span></span>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons & Current User Badge -->
+      <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+        <button onclick="openTestModal()" class="px-3 py-2 bg-line text-white rounded-lg hover:bg-line-hover text-xs font-medium transition flex items-center gap-1.5 shadow-md shadow-line/10">
+          <i class="fa-solid fa-vial"></i>
+          <span>ทดสอบระบบ AI</span>
+        </button>
+        <button onclick="syncKnowledge()" class="px-3 py-2 bg-dark-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-lg text-xs font-medium transition flex items-center gap-1.5">
+          <i class="fa-solid fa-arrows-rotate" id="syncIcon"></i>
+          <span>ซิงค์ RAG</span>
+        </button>
+        
+        <!-- Logged-in User Profile & Logout -->
+        <div class="pl-2 border-l border-gray-800 flex items-center gap-2">
+          <div class="text-right hidden sm:block">
+            <p id="user-display-name" class="text-xs font-bold text-gray-200">Admin User</p>
+            <p id="user-display-role" class="text-[10px] text-line font-medium">Super Admin</p>
+          </div>
+          <button onclick="handleLogout()" title="ออกจากระบบ" class="w-9 h-9 bg-dark-800 hover:bg-red-500/20 hover:text-red-400 border border-gray-700 hover:border-red-500/30 text-gray-300 rounded-xl flex items-center justify-center text-xs transition">
+            <i class="fa-solid fa-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <div class="flex-1 max-w-7xl w-full mx-auto flex flex-col md:flex-row gap-6 p-4 md:p-6">
+    
+    <!-- SIDEBAR NAVIGATION -->
+    <aside class="w-full md:w-64 flex-shrink-0">
+      <nav class="bg-dark-850 border border-gray-800 rounded-2xl p-2 sticky top-20 flex md:flex-col gap-1 overflow-x-auto">
+        <button onclick="switchTab('dashboard')" id="tab-btn-dashboard" class="tab-btn active flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition text-left w-full whitespace-nowrap">
+          <i class="fa-solid fa-chart-pie w-5 text-center text-line"></i>
+          <span>Dashboard & Analytics</span>
+        </button>
+        <button onclick="switchTab('livechat')" id="tab-btn-livechat" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition text-left w-full whitespace-nowrap text-gray-400 hover:bg-dark-800 hover:text-gray-200">
+          <i class="fa-solid fa-comments w-5 text-center"></i>
+          <span>Live Chat Monitor</span>
+          <span class="ml-auto bg-red-500/20 text-red-400 text-xs px-2 py-0.5 rounded-full font-bold border border-red-500/30">2</span>
+        </button>
+        <button onclick="switchTab('knowledge')" id="tab-btn-knowledge" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition text-left w-full whitespace-nowrap text-gray-400 hover:bg-dark-800 hover:text-gray-200">
+          <i class="fa-solid fa-brain w-5 text-center"></i>
+          <span>AI Knowledge Base</span>
+        </button>
+        <button onclick="switchTab('prompt')" id="tab-btn-prompt" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition text-left w-full whitespace-nowrap text-gray-400 hover:bg-dark-800 hover:text-gray-200">
+          <i class="fa-solid fa-sliders w-5 text-center"></i>
+          <span>Prompt & Rules Engine</span>
+        </button>
+        <button onclick="switchTab('optimization')" id="tab-btn-optimization" class="tab-btn flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition text-left w-full whitespace-nowrap text-gray-400 hover:bg-dark-800 hover:text-gray-200">
+          <i class="fa-solid fa-chart-line w-5 text-center"></i>
+          <span>Response Quality Audit</span>
+        </button>
+      </nav>
+
+      <!-- Quick Stats Card in Sidebar -->
+      <div class="mt-4 p-4 bg-dark-850 border border-gray-800/80 rounded-2xl hidden md:block">
+        <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">สถานะทรัพยากร AI</h4>
+        <div class="space-y-3 text-xs">
+          <div>
+            <div class="flex justify-between text-gray-300 mb-1">
+              <span>Gemini API Quota</span>
+              <span class="text-line font-medium">34%</span>
+            </div>
+            <div class="w-full bg-dark-800 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-line h-full rounded-full" style="width: 34%"></div>
+            </div>
+          </div>
+          <div>
+            <div class="flex justify-between text-gray-300 mb-1">
+              <span>Vector Database Usage</span>
+              <span class="text-blue-400 font-medium">1,240 / 5,000 Docs</span>
+            </div>
+            <div class="w-full bg-dark-800 h-1.5 rounded-full overflow-hidden">
+              <div class="bg-blue-500 h-full rounded-full" style="width: 25%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- TAB CONTENTS VIEW AREA -->
+    <main class="flex-1 min-w-0">
+      
+      <!-- ================= TAB 1: DASHBOARD & ANALYTICS ================= -->
+      <section id="tab-dashboard" class="tab-content space-y-6">
+        
+        <!-- KPI Metrics Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div class="bg-dark-850 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs text-gray-400">ข้อความทั้งหมดวันนี้</p>
+                <h3 class="text-2xl font-bold mt-1 text-white">2,845</h3>
+                <p class="text-xs text-line mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-arrow-trend-up"></i> +14.2% จากเมื่อวาน
+                </p>
+              </div>
+              <div class="p-3 bg-line/10 text-line rounded-xl">
+                <i class="fa-solid fa-message text-xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-dark-850 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs text-gray-400">อัตรา AI ตอบสำเร็จ (Auto-Reply)</p>
+                <h3 class="text-2xl font-bold mt-1 text-white">92.4%</h3>
+                <p class="text-xs text-line mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-circle-check"></i> ไม่ต้องใช้แอดมิน 2,628 แชท
+                </p>
+              </div>
+              <div class="p-3 bg-blue-500/10 text-blue-400 rounded-xl">
+                <i class="fa-solid fa-robot text-xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-dark-850 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs text-gray-400">ความเร็วตอบกลับเฉลี่ย</p>
+                <h3 class="text-2xl font-bold mt-1 text-white">1.2 วินาที</h3>
+                <p class="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-bolt text-amber-400"></i> เร็วกว่าแอดมินคน 98%
+                </p>
+              </div>
+              <div class="p-3 bg-amber-500/10 text-amber-400 rounded-xl">
+                <i class="fa-solid fa-stopwatch text-xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-dark-850 border border-gray-800 p-4 rounded-2xl relative overflow-hidden">
+            <div class="flex justify-between items-start">
+              <div>
+                <p class="text-xs text-gray-400">ความพึงพอใจลูกค้า (CSAT)</p>
+                <h3 class="text-2xl font-bold mt-1 text-white">4.8 / 5.0</h3>
+                <p class="text-xs text-line mt-1 flex items-center gap-1">
+                  <i class="fa-solid fa-star text-amber-400"></i> จาก 412 รีวิว
+                </p>
+              </div>
+              <div class="p-3 bg-purple-500/10 text-purple-400 rounded-xl">
+                <i class="fa-solid fa-face-smile text-xl"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Section (Grid 2 Cols) -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <!-- Sentiment Meter & Customer Intent Distribution -->
+          <div class="bg-dark-850 border border-gray-800 p-5 rounded-2xl space-y-4">
+            <h3 class="text-sm font-semibold text-gray-200 flex items-center gap-2">
+              <i class="fa-solid fa-heart-pulse text-line"></i>
+              วิเคราะห์ Sentiment อารมณ์ลูกค้า
+            </h3>
+            
+            <!-- Sentiment Meters -->
+            <div class="space-y-3 pt-2">
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-emerald-400 flex items-center gap-1"><i class="fa-solid fa-face-laugh"></i> เชิงบวก (Positive)</span>
+                  <span class="text-gray-300 font-semibold">68%</span>
+                </div>
+                <div class="w-full bg-dark-800 h-2.5 rounded-full overflow-hidden">
+                  <div class="bg-emerald-500 h-full rounded-full" style="width: 68%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-gray-400 flex items-center gap-1"><i class="fa-solid fa-face-meh"></i> ปานกลาง / สอบถามทั่วไป</span>
+                  <span class="text-gray-300 font-semibold">24%</span>
+                </div>
+                <div class="w-full bg-dark-800 h-2.5 rounded-full overflow-hidden">
+                  <div class="bg-gray-400 h-full rounded-full" style="width: 24%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-xs mb-1">
+                  <span class="text-red-400 flex items-center gap-1"><i class="fa-solid fa-face-frown"></i> เชิงลบ / ร้องเรียน</span>
+                  <span class="text-gray-300 font-semibold">8%</span>
+                </div>
+                <div class="w-full bg-dark-800 h-2.5 rounded-full overflow-hidden">
+                  <div class="bg-red-500 h-full rounded-full" style="width: 8%"></div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="border-gray-800 my-4">
+
+            <!-- Top Customer Intents -->
+            <div>
+              <h4 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">หัวข้อที่ลูกค้าทักถามบ่อย (Top Intents)</h4>
+              <div class="space-y-2 text-xs">
+                <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800">
+                  <span class="text-gray-300 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-line"></span> สอบถามราคาสินค้า / โปรโมชั่น</span>
+                  <span class="font-bold text-gray-200">42%</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800">
+                  <span class="text-gray-300 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-blue-400"></span> ติดตามสถานะการจัดส่ง</span>
+                  <span class="font-bold text-gray-200">28%</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800">
+                  <span class="text-gray-300 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-purple-400"></span> วิธีการสั่งซื้อ & ชำระเงิน</span>
+                  <span class="font-bold text-gray-200">18%</span>
+                </div>
+                <div class="flex items-center justify-between p-2 rounded-lg bg-dark-800">
+                  <span class="text-gray-300 flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-400"></span> เคลมสินค้า / ร้องเรียน</span>
+                  <span class="font-bold text-gray-200">12%</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Peak Chat Hours Chart -->
+          <div class="bg-dark-850 border border-gray-800 p-5 rounded-2xl lg:col-span-2 flex flex-col justify-between">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                <i class="fa-solid fa-clock text-blue-400"></i>
+                ความหนาแน่นการแชทรายชั่วโมง (Peak Chat Hours)
+              </h3>
+              <span class="text-xs text-gray-400 bg-dark-800 px-2.5 py-1 rounded-lg border border-gray-700">อัปเดตเรียลไทม์</span>
+            </div>
+
+            <div class="relative w-full h-64">
+              <canvas id="peakHoursChart"></canvas>
+            </div>
+
+            <div class="mt-4 p-3 bg-line/10 border border-line/20 rounded-xl text-xs text-line flex items-center gap-3">
+              <i class="fa-solid fa-lightbulb text-lg flex-shrink-0"></i>
+              <span><strong>AI Insight:</strong> ช่วงเวลาทักสูงสุดคือ <strong>12:00 - 13:00 น.</strong> และ <strong>19:00 - 21:00 น.</strong> AI ช่วยลดภาระแอดมินในช่วงพักและนอกเวลาทำการได้ 100%</span>
+            </div>
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ================= TAB 2: LIVE CHAT MONITOR & HANDOVER ================= -->
+      <section id="tab-livechat" class="tab-content hidden space-y-4">
+        
+        <div class="bg-dark-850 border border-gray-800 rounded-2xl overflow-hidden flex flex-col md:flex-row h-[700px]">
+          
+          <!-- Chat Threads Sidebar -->
+          <div class="w-full md:w-80 border-b md:border-b-0 md:border-r border-gray-800 flex flex-col bg-dark-850">
+            <div class="p-3 border-b border-gray-800 flex items-center justify-between">
+              <h3 class="font-semibold text-sm text-gray-200">รายการแชทสด</h3>
+              <span class="text-xs bg-dark-800 text-gray-400 px-2 py-0.5 rounded-full">ออนไลน์ 4 คน</span>
+            </div>
+
+            <!-- Chat List -->
+            <div class="flex-1 overflow-y-auto divide-y divide-gray-800/50">
+              
+              <!-- Chat Item 1 (Requires Handover) -->
+              <div onclick="selectChat(1)" id="chat-item-1" class="p-3 bg-dark-800/80 cursor-pointer border-l-4 border-red-500 hover:bg-dark-800 transition">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold text-sm text-gray-100 flex items-center gap-2">
+                    คุณ สมชาย พรประเสริฐ
+                  </span>
+                  <span class="text-[10px] text-gray-400">10:42 น.</span>
+                </div>
+                <p class="text-xs text-gray-300 truncate">ต้องการส่งคืนสินค้าที่ชำรุด ดำเนินการอย่างไรครับ?</p>
+                <div class="flex items-center justify-between mt-2">
+                  <span class="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded">
+                    <i class="fa-solid fa-triangle-exclamation"></i> ต้องการแอดมินช่วย
+                  </span>
+                  <span class="text-[10px] text-gray-400">AI Conf: 42%</span>
+                </div>
+              </div>
+
+              <!-- Chat Item 2 (AI Handling) -->
+              <div onclick="selectChat(2)" id="chat-item-2" class="p-3 cursor-pointer border-l-4 border-line hover:bg-dark-800 transition">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold text-sm text-gray-100">คุณ ณิชา กิตติสุข</span>
+                  <span class="text-[10px] text-gray-400">10:39 น.</span>
+                </div>
+                <p class="text-xs text-gray-400 truncate">ขอบคุณสำหรับข้อมูลราคาโปรโมชั่นนะคะ</p>
+                <div class="flex items-center justify-between mt-2">
+                  <span class="text-[10px] bg-line/20 text-line border border-line/30 px-2 py-0.5 rounded">
+                    <i class="fa-solid fa-robot"></i> AI ตอบสำเร็จ
+                  </span>
+                  <span class="text-[10px] text-gray-400">AI Conf: 98%</span>
+                </div>
+              </div>
+
+              <!-- Chat Item 3 (AI Handling) -->
+              <div onclick="selectChat(3)" id="chat-item-3" class="p-3 cursor-pointer border-l-4 border-line hover:bg-dark-800 transition">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-semibold text-sm text-gray-100">คุณ กิตติศักดิ์</span>
+                  <span class="text-[10px] text-gray-400">09:15 น.</span>
+                </div>
+                <p class="text-xs text-gray-400 truncate">เช็คเลข พัสดุ TH10928374</p>
+                <div class="flex items-center justify-between mt-2">
+                  <span class="text-[10px] bg-line/20 text-line border border-line/30 px-2 py-0.5 rounded">
+                    <i class="fa-solid fa-robot"></i> AI ตอบสำเร็จ
+                  </span>
+                  <span class="text-[10px] text-gray-400">AI Conf: 95%</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Main Chat Window Area -->
+          <div class="flex-1 flex flex-col bg-dark-900">
+            
+            <!-- Chat Header -->
+            <div class="p-3 border-b border-gray-800 bg-dark-850 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-sm">
+                  ส
+                </div>
+                <div>
+                  <h4 class="font-semibold text-sm text-gray-100" id="chat-header-name">คุณ สมชาย พรประเสริฐ</h4>
+                  <div class="flex items-center gap-2 text-xs text-gray-400">
+                    <span id="chat-intent-tag" class="text-amber-400">Intent: Complaint / Return Policy</span>
+                    <span>•</span>
+                    <span id="chat-sentiment-tag" class="text-red-400">Sentiment: Negative (-0.68)</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Human Takeover Toggle -->
+              <div class="flex items-center gap-3">
+                <div class="text-right hidden sm:block">
+                  <p class="text-xs font-medium text-gray-300">โหมดควบคุมระบบ</p>
+                  <p id="mode-status-text" class="text-[10px] text-amber-400">รอแอดมินแทรกแซง</p>
+                </div>
+                <button id="takeover-btn" onclick="toggleTakeover()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-xl transition flex items-center gap-2 shadow-lg shadow-red-600/20">
+                  <i class="fa-solid fa-user-gear"></i>
+                  <span id="takeover-btn-text">ดึงเคสมาตอบเอง (Human Control)</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Messages Stream -->
+            <div class="flex-1 p-4 overflow-y-auto space-y-4" id="chat-messages-container">
+              
+              <!-- System Timestamp -->
+              <div class="text-center">
+                <span class="text-[10px] bg-dark-800 text-gray-400 px-2.5 py-1 rounded-full border border-gray-700">วันนี้ 10:40 น.</span>
+              </div>
+
+              <!-- User Message -->
+              <div class="flex items-start gap-2.5 justify-start">
+                <div class="w-8 h-8 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  ส
+                </div>
+                <div>
+                  <div class="line-bubble-user p-3 max-w-md text-xs shadow">
+                    สวัสดีครับ สั่งสินค้าไปเมื่อวานแล้วของแตกชำรุด ต้องการส่งคืนสินค้าเพื่อเปลี่ยนใหม่ ต้องทำอย่างไรครับ?
+                  </div>
+                  <span class="text-[10px] text-gray-500 mt-1 block">10:40 น.</span>
+                </div>
+              </div>
+
+              <!-- AI Auto Reply with Flex Card Simulation -->
+              <div class="flex items-start gap-2 justify-start flex-row-reverse">
+                <div class="w-8 h-8 rounded-full bg-line text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="flex flex-col items-end">
+                  <div class="line-bubble-bot p-3.5 max-w-md text-xs shadow space-y-2">
+                    <p>สวัสดีครับคุณ สมชาย 🙏 ทางเราต้องขออภัยอย่างยิ่งสำหรับความไม่สะดวกครับ</p>
+                    <p>เงื่อนไขการเคลมสินค้าชำรุด รบกวนส่งหลักฐานดังนี้ครับ:</p>
+                    <ul class="list-disc pl-4 space-y-1 text-gray-300">
+                      <li>รูปถ่ายกล่องพัสดุและสินค้าที่ชำรุด</li>
+                      <li>หมายเลขคำสั่งซื้อ (Order ID)</li>
+                    </ul>
+                    <p class="text-emerald-400 font-medium">ขณะนี้ AI ได้ส่งเคสนี้ให้แอดมินเพื่อช่วยดูแลเป็นพิเศษแล้วครับ กรุณารอแอดมินตอบสักครู่ครับ 😊</p>
+                  </div>
+                  
+                  <!-- AI Confidence Metadata Badge -->
+                  <div class="mt-1 flex items-center gap-2 text-[10px]">
+                    <span class="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+                      <i class="fa-solid fa-gauge-simple-high"></i> AI Confidence: 42% (Low)
+                    </span>
+                    <span class="text-gray-500">ตอบกลับใน 1.1s</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- User Follow-up -->
+              <div class="flex items-start gap-2.5 justify-start">
+                <div class="w-8 h-8 rounded-full bg-gray-700 text-gray-300 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                  ส
+                </div>
+                <div>
+                  <div class="line-bubble-user p-3 max-w-md text-xs shadow">
+                    โอเคครับ ผมถ่ายรูปส่งให้แล้ว Order ID #99281 ครับ รบกวนเร่งให้หน่อยนะครับ
+                  </div>
+                  <span class="text-[10px] text-gray-500 mt-1 block">10:42 น.</span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Admin Input Box -->
+            <div class="p-3 border-t border-gray-800 bg-dark-850">
+              <div class="flex items-center gap-2">
+                <input type="text" id="admin-input-field" disabled placeholder="คลิก 'ดึงเคสมาตอบเอง' เพื่อเริ่มพิมพ์ตอบลูกค้า..." class="flex-1 bg-dark-900 border border-gray-700 rounded-xl px-4 py-2.5 text-xs text-gray-100 focus:outline-none focus:border-line disabled:opacity-50">
+                <button id="send-btn" disabled onclick="sendAdminMessage()" class="px-4 py-2.5 bg-line text-white rounded-xl text-xs font-semibold hover:bg-line-hover transition disabled:opacity-50 disabled:hover:bg-line">
+                  <i class="fa-solid fa-paper-plane"></i>
+                </button>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ================= TAB 3: AI KNOWLEDGE BASE (RAG) ================= -->
+      <section id="tab-knowledge" class="tab-content hidden space-y-6">
+        
+        <!-- Header & Search -->
+        <div class="bg-dark-850 border border-gray-800 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-center gap-4">
+          <div>
+            <h2 class="text-lg font-bold text-gray-100 flex items-center gap-2">
+              <i class="fa-solid fa-database text-line"></i>
+              จัดการฐานความรู้ธุรกิจ (RAG Knowledge Base)
+            </h2>
+            <p class="text-xs text-gray-400">ข้อมูลสินค้า ราคา และเงื่อนไขบริการเพื่อให้ AI ใช้ดึงมาตอบคำถามลูกค้า</p>
+          </div>
+
+          <div class="flex items-center gap-2 w-full md:w-auto">
+            <div class="relative flex-1 md:w-64">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-xs text-gray-400"></i>
+              <input type="text" id="kb-search-input" onkeyup="filterKnowledge()" placeholder="ค้นหาบทความ/คำตอบ..." class="w-full bg-dark-900 border border-gray-700 rounded-xl pl-8 pr-4 py-2 text-xs text-gray-100 focus:outline-none focus:border-line">
+            </div>
+            <button onclick="openAddKnowledgeModal()" class="px-4 py-2 bg-line hover:bg-line-hover text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 whitespace-nowrap">
+              <i class="fa-solid fa-plus"></i>
+              <span>เพิ่มองค์ความรู้ใหม่</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Knowledge Items Table -->
+        <div class="bg-dark-850 border border-gray-800 rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-dark-800 text-gray-400 text-[11px] uppercase tracking-wider border-b border-gray-700">
+                  <th class="p-4">หมวดหมู่ (Category)</th>
+                  <th class="p-4">คำถาม/คีย์เวิร์ด (Keywords)</th>
+                  <th class="p-4">ข้อมูลคำตอบ AI (Retrieved Answer)</th>
+                  <th class="p-4 text-center">ความถี่ที่ถูกดึงใช้</th>
+                  <th class="p-4 text-right">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="kb-table-body" class="divide-y divide-gray-800 text-xs">
+                
+                <!-- Item 1 -->
+                <tr class="hover:bg-dark-800/50 transition">
+                  <td class="p-4">
+                    <span class="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                      ราคาและโปรโมชั่น
+                    </span>
+                  </td>
+                  <td class="p-4 font-medium text-gray-200">ราคาเท่าไหร่, มีโปรไหม, ส่วนลดประจำเดือน</td>
+                  <td class="p-4 text-gray-300 max-w-xs truncate">สินค้าเริ่มที่ 490 บาท โปรโมชั่นเดือนนี้ ซื้อ 2 ชิ้น ฟรีค่าจัดส่งด่วน EMS</td>
+                  <td class="p-4 text-center font-bold text-gray-300">842 ครั้ง</td>
+                  <td class="p-4 text-right space-x-2">
+                    <button class="text-gray-400 hover:text-line transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="deleteKnowledge(this)" class="text-gray-400 hover:text-red-400 transition"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+
+                <!-- Item 2 -->
+                <tr class="hover:bg-dark-800/50 transition">
+                  <td class="p-4">
+                    <span class="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                      การจัดส่ง
+                    </span>
+                  </td>
+                  <td class="p-4 font-medium text-gray-200">กี่วันได้ของ, ค่าส่งเท่าไหร่, ส่งกับเจ้าไหน</td>
+                  <td class="p-4 text-gray-300 max-w-xs truncate">จัดส่งโดย Flash Express และ EMS ใช้เวลา 1-2 วันทำการ ค่าส่งเหมา 50 บาท</td>
+                  <td class="p-4 text-center font-bold text-gray-300">512 ครั้ง</td>
+                  <td class="p-4 text-right space-x-2">
+                    <button class="text-gray-400 hover:text-line transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="deleteKnowledge(this)" class="text-gray-400 hover:text-red-400 transition"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+
+                <!-- Item 3 -->
+                <tr class="hover:bg-dark-800/50 transition">
+                  <td class="p-4">
+                    <span class="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-full text-[10px] font-medium">
+                      นโยบายการคืนสินค้า
+                    </span>
+                  </td>
+                  <td class="p-4 font-medium text-gray-200">สินค้าชำรุด, ส่งเปลี่ยน, เงื่อนไขการเคลม</td>
+                  <td class="p-4 text-gray-300 max-w-xs truncate">รับประกันสินค้าภายใน 7 วันหลังได้รับพัสดุ ต้องมีวิดีโอตอนแกะกล่องเป็นหลักฐาน</td>
+                  <td class="p-4 text-center font-bold text-gray-300">189 ครั้ง</td>
+                  <td class="p-4 text-right space-x-2">
+                    <button class="text-gray-400 hover:text-line transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                    <button onclick="deleteKnowledge(this)" class="text-gray-400 hover:text-red-400 transition"><i class="fa-solid fa-trash"></i></button>
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ================= TAB 4: PROMPT & RULES ENGINE ================= -->
+      <section id="tab-prompt" class="tab-content hidden space-y-6">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          <!-- System Prompt Editor -->
+          <div class="lg:col-span-2 bg-dark-850 border border-gray-800 p-5 rounded-2xl space-y-4">
+            <div class="flex justify-between items-center">
+              <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-line"></i>
+                ตั้งค่า System Prompt หลักของธุรกิจ
+              </h3>
+              <span class="text-xs text-gray-400">กำหนดบทบาทและบุคลิกให้ AI</span>
+            </div>
+
+            <textarea id="system-prompt-text" rows="12" class="w-full bg-dark-900 border border-gray-700 rounded-xl p-4 text-xs font-mono text-gray-200 focus:outline-none focus:border-line leading-relaxed">
+คุณคือ "น้องการ์ตูน" ผู้ช่วยอัจฉริยะแอดมินประจำ LINE Official Account ของแบรนด์ SmartShopping
+- ตอบด้วยความเป็นกันเอง สุภาพ มีหางเสียง "ค่ะ/นะคะ" สดใส และใส่ Emoji อย่างเหมาะสม
+- ตอบให้สั้น กระชับ ตรงประเด็น ไม่เกิน 3-4 ประโยคต่อหนึ่งข้อความ
+- ให้ใช้เฉพาะข้อมูลที่อยู่ใน Knowledge Base เท่านั้น หากไม่แน่ใจ ให้แจ้งลูกค้าอย่างสุภาพว่ากำลังประสานงานให้แอดมินคนเข้ามาดูแล
+- ห้ามตอบเรื่องการเมือง หรือเรื่องที่ไม่เกี่ยวข้องกับธุรกิจเด็ดขาด</textarea>
+
+            <div class="flex justify-end gap-3 pt-2">
+              <button onclick="resetSystemPrompt()" class="px-4 py-2 bg-dark-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-medium transition">
+                รีเซ็ตเป็นค่าเริ่มต้น
+              </button>
+              <button onclick="savePromptSettings()" class="px-5 py-2 bg-line hover:bg-line-hover text-white rounded-xl text-xs font-semibold transition flex items-center gap-2 shadow-lg shadow-line/20">
+                <i class="fa-solid fa-floppy-disk"></i>
+                <span>บันทึกการตั้งค่า Prompt</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Parameter Rules & Thresholds -->
+          <div class="bg-dark-850 border border-gray-800 p-5 rounded-2xl space-y-5">
+            <h3 class="text-sm font-semibold text-gray-100 flex items-center gap-2">
+              <i class="fa-solid fa-gears text-purple-400"></i>
+              ตั้งค่า AI Engine & เงื่อนไข
+            </h3>
+
+            <!-- Tone Selector -->
+            <div>
+              <label class="block text-xs font-medium text-gray-300 mb-2">น้ำเสียงการตอบ (Tone of Voice)</label>
+              <select class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-200 focus:outline-none focus:border-line">
+                <option value="friendly">😊 สดใส เป็นกันเอง (Friendly & Polite)</option>
+                <option value="professional">💼 เป็นทางการ สุภาพ (Professional)</option>
+                <option value="concise">⚡ สั้น กระชับ เน้นข้อมูล (Concise & Fast)</option>
+              </select>
+            </div>
+
+            <!-- Confidence Threshold Slider -->
+            <div>
+              <div class="flex justify-between text-xs mb-1">
+                <label class="text-gray-300">เกณฑ์สลับให้แอดมิน (Handover Threshold)</label>
+                <span id="threshold-val" class="font-bold text-line">60%</span>
+              </div>
+              <input type="range" min="30" max="90" value="60" oninput="document.getElementById('threshold-val').innerText = this.value + '%'" class="w-full accent-line cursor-pointer">
+              <p class="text-[10px] text-gray-400 mt-1">หาก AI มีความมั่นใจต่ำกว่าค่านี้ ระบบจะส่งการแจ้งเตือนให้แอดมินแทรกแซงทันที</p>
+            </div>
+
+            <!-- Fallback Response -->
+            <div>
+              <label class="block text-xs font-medium text-gray-300 mb-2">ข้อความสำรอง (Fallback Response)</label>
+              <textarea rows="3" class="w-full bg-dark-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-line">ขออภัยด้วยนะคะ เรื่องนี้เกินขอบเขตข้อมูลของ AI น้องการ์ตูนกำลังประสานงานให้แอดมินเข้ามาตอบคำถามให้นะคะ รอสักครู่นะคะ 🙏</textarea>
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+
+      <!-- ================= TAB 5: RESPONSE QUALITY AUDIT ================= -->
+      <section id="tab-optimization" class="tab-content hidden space-y-6">
+        
+        <div class="bg-dark-850 border border-gray-800 p-5 rounded-2xl flex justify-between items-center">
+          <div>
+            <h2 class="text-lg font-bold text-gray-100 flex items-center gap-2">
+              <i class="fa-solid fa-list-check text-amber-400"></i>
+              ตรวจสอบคุณภาพการตอบของ AI (Response Quality Audit)
+            </h2>
+            <p class="text-xs text-gray-400">ประเมินความถูกต้องของคำตอบ AI เพื่อนำไปปรับปรุง Knowledge Base</p>
+          </div>
+          <span class="text-xs bg-amber-500/10 text-amber-400 border border-amber-500/20 px-3 py-1.5 rounded-full font-medium">
+            ต้องรีวิว 3 คำตอบ
+          </span>
+        </div>
+
+        <!-- Audit Table -->
+        <div class="bg-dark-850 border border-gray-800 rounded-2xl overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-dark-800 text-gray-400 text-[11px] uppercase tracking-wider border-b border-gray-700">
+                  <th class="p-4">ข้อความจากลูกค้า</th>
+                  <th class="p-4">คำตอบที่ AI ส่งให้ลูกค้า</th>
+                  <th class="p-4 text-center">ความถูกต้อง</th>
+                  <th class="p-4">คำแนะนำการปรับปรุง</th>
+                  <th class="p-4 text-right">ดำเนินการ</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-800 text-xs">
+                
+                <tr class="hover:bg-dark-800/50 transition">
+                  <td class="p-4 font-medium text-gray-200">หน้าร้านจริงอยู่ที่ไหนครับ?</td>
+                  <td class="p-4 text-gray-300 max-w-xs">ร้านเราเป็นร้านค้าออนไลน์ 100% ค่ะ ไม่มีหน้าร้าน แต่จัดส่งด่วนได้ทั่วประเทศเลยนะคะ</td>
+                  <td class="p-4 text-center">
+                    <span class="text-emerald-400 font-bold"><i class="fa-solid fa-circle-check"></i> ถูกต้อง (100%)</span>
+                  </td>
+                  <td class="p-4 text-gray-400">ตอบได้ชัดเจนตามนโยบาย</td>
+                  <td class="p-4 text-right">
+                    <button class="px-3 py-1 bg-dark-800 hover:bg-gray-700 text-gray-300 rounded-lg text-[11px]">อนุมัติ</button>
+                  </td>
+                </tr>
+
+                <tr class="hover:bg-dark-800/50 transition">
+                  <td class="p-4 font-medium text-gray-200">มีบริการส่งด่วน Grab ภายในวันนี้ไหม?</td>
+                  <td class="p-4 text-gray-300 max-w-xs">ขออภัยด้วยค่ะ ทางเราส่งโดย EMS และ Flash Express ค่ะ</td>
+                  <td class="p-4 text-center">
+                    <span class="text-amber-400 font-bold"><i class="fa-solid fa-triangle-exclamation"></i> ควรปรับปรุง (60%)</span>
+                  </td>
+                  <td class="p-4 text-amber-300/80">ควรเพิ่มข้อมูลใน RAG ว่า "มีบริการส่ง Grab rider หากลูกค้าจ่ายค่าส่งตามจริง"</td>
+                  <td class="p-4 text-right">
+                    <button onclick="switchTab('knowledge')" class="px-3 py-1 bg-line/20 hover:bg-line/30 text-line border border-line/30 rounded-lg text-[11px]">เพิ่มใน RAG</button>
+                  </td>
+                </tr>
+
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- TEST AI PROMPT SIMULATION MODAL -->
+  <div id="testModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-dark-850 border border-gray-800 rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col h-[550px]">
+      
+      <!-- Modal Header -->
+      <div class="p-4 border-b border-gray-800 flex justify-between items-center bg-dark-800">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-vial text-line"></i>
+          <h3 class="font-semibold text-sm text-gray-100">ทดสอบจำลองการคุยกับ AI (Sandbox)</h3>
+        </div>
+        <button onclick="closeTestModal()" class="text-gray-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <!-- Test Chat Stream -->
+      <div id="test-chat-box" class="flex-1 p-4 overflow-y-auto space-y-3 bg-dark-900">
+        <div class="text-center">
+          <span class="text-[10px] text-gray-500">พิมพ์ทดสอบคำถาม เพื่อดูการดึงข้อมูลจาก RAG และการตอบของ AI</span>
+        </div>
+      </div>
+
+      <!-- Test Input Form -->
+      <div class="p-3 border-t border-gray-800 bg-dark-850">
+        <form onsubmit="runAiTest(event)" class="flex gap-2">
+          <input type="text" id="test-input" placeholder="พิมพ์ข้อความทดสอบ เช่น 'ค่าจัดส่งกี่บาท'..." class="flex-1 bg-dark-900 border border-gray-700 rounded-xl px-4 py-2 text-xs text-gray-100 focus:outline-none focus:border-line">
+          <button type="submit" class="px-4 py-2 bg-line text-white rounded-xl text-xs font-semibold hover:bg-line-hover transition">
+            ส่งข้อความ
+          </button>
+        </form>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ADD KNOWLEDGE MODAL -->
+  <div id="addKnowledgeModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-dark-850 border border-gray-800 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl p-5 space-y-4">
+      <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+        <h3 class="font-semibold text-sm text-gray-100">เพิ่มองค์ความรู้ธุรกิจใหม่ (New RAG Entry)</h3>
+        <button onclick="closeAddKnowledgeModal()" class="text-gray-400 hover:text-white text-lg">&times;</button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">หมวดหมู่</label>
+          <input type="text" id="new-category" placeholder="เช่น การรับประกัน, สาขา" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-100 focus:outline-none focus:border-line">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">คีย์เวิร์ด/คำถามคำที่พบบ่อย</label>
+          <input type="text" id="new-keywords" placeholder="เช่น มีสาขาไหนบ้าง, อยู่แถวไหน" class="w-full bg-dark-900 border border-gray-700 rounded-xl px-3 py-2 text-xs text-gray-100 focus:outline-none focus:border-line">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">ข้อมูลรายละเอียดที่ถูกต้องสำหรับ AI ตอบ</label>
+          <textarea id="new-answer" rows="4" placeholder="ระบุรายละเอียดคำตอบให้ชัดเจน..." class="w-full bg-dark-900 border border-gray-700 rounded-xl p-3 text-xs text-gray-100 focus:outline-none focus:border-line"></textarea>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2">
+        <button onclick="closeAddKnowledgeModal()" class="px-4 py-2 bg-dark-800 hover:bg-gray-700 text-gray-300 text-xs rounded-xl">ยกเลิก</button>
+        <button onclick="saveNewKnowledge()" class="px-4 py-2 bg-line hover:bg-line-hover text-white text-xs font-semibold rounded-xl">บันทึกข้อมูล</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APP LOGIC -->
+  <script>
+    // ================= USER AUTHENTICATION & SESSION MANAGEMENT =================
+    const DEFAULT_ADMIN = { username: 'admin', pass: 'admin123', name: 'ผู้ดูแลระบบ (Admin)', role: 'Super Admin' };
+
+    function checkAuthStatus() {
+      const activeUser = localStorage.getItem('line_oa_active_user');
+      const authContainer = document.getElementById('auth-container');
+      
+      if (activeUser) {
+        const user = JSON.parse(activeUser);
+        document.getElementById('user-display-name').innerText = user.name || user.username;
+        document.getElementById('user-display-role').innerText = user.role || 'Administrator';
+        authContainer.classList.add('hidden');
+      } else {
+        authContainer.classList.remove('hidden');
+      }
+    }
+
+    function fillDemoCredentials() {
+      document.getElementById('login-username').value = DEFAULT_ADMIN.username;
+      document.getElementById('login-password').value = DEFAULT_ADMIN.pass;
+    }
+
+    function handleLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('login-username').value.trim();
+      const p = document.getElementById('login-password').value.trim();
+      const errBox = document.getElementById('auth-error');
+
+      // Check registered users in localStorage or default
+      const storedUsers = JSON.parse(localStorage.getItem('line_oa_users') || '[]');
+      const foundUser = storedUsers.find(x => x.username === u && x.pass === p) || 
+                        (u === DEFAULT_ADMIN.username && p === DEFAULT_ADMIN.pass ? DEFAULT_ADMIN : null);
+
+      if (foundUser) {
+        errBox.classList.add('hidden');
+        localStorage.setItem('line_oa_active_user', JSON.stringify(foundUser));
+        checkAuthStatus();
+      } else {
+        errBox.classList.remove('hidden');
+        document.getElementById('auth-error-msg').innerText = 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+      }
+    }
+
+    function handleRegister(e) {
+      e.preventDefault();
+      const fullname = document.getElementById('reg-fullname').value.trim();
+      const u = document.getElementById('reg-username').value.trim();
+      const p = document.getElementById('reg-password').value.trim();
+      const errBox = document.getElementById('auth-error');
+
+      if (p.length < 6) {
+        errBox.classList.remove('hidden');
+        document.getElementById('auth-error-msg').innerText = 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร';
+        return;
+      }
+
+      let storedUsers = JSON.parse(localStorage.getItem('line_oa_users') || '[]');
+      if (storedUsers.some(x => x.username === u) || u === 'admin') {
+        errBox.classList.remove('hidden');
+        document.getElementById('auth-error-msg').innerText = 'ชื่อผู้ใช้นี้มีอยู่ในระบบแล้ว';
+        return;
+      }
+
+      const newUser = { username: u, pass: p, name: fullname, role: 'Store Manager' };
+      storedUsers.push(newUser);
+      localStorage.setItem('line_oa_users', JSON.stringify(storedUsers));
+      localStorage.setItem('line_oa_active_user', JSON.stringify(newUser));
+
+      errBox.classList.add('hidden');
+      checkAuthStatus();
+    }
+
+    function handleLogout() {
+      if (confirm('คุณต้องการออกจากระบบหรือไม่?')) {
+        localStorage.removeItem('line_oa_active_user');
+        checkAuthStatus();
+      }
+    }
+
+    let isRegisterMode = false;
+    function toggleAuthMode() {
+      isRegisterMode = !isRegisterMode;
+      const loginForm = document.getElementById('login-form');
+      const regForm = document.getElementById('register-form');
+      const promptText = document.getElementById('auth-toggle-prompt');
+      const toggleBtn = document.getElementById('auth-toggle-btn');
+
+      if (isRegisterMode) {
+        loginForm.classList.add('hidden');
+        regForm.classList.remove('hidden');
+        promptText.innerText = 'มีบัญชีอยู่แล้ว?';
+        toggleBtn.innerText = 'เข้าสู่ระบบ';
+      } else {
+        regForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        promptText.innerText = 'ยังไม่มีบัญชีผู้ใช้ระบบ?';
+        toggleBtn.innerText = 'ลงทะเบียนผู้ใช้ใหม่';
+      }
+    }
+
+    // Tab Switch Logic
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active', 'bg-dark-800', 'text-line');
+        btn.classList.add('text-gray-400');
+      });
+
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-btn-${tabId}`);
+      activeBtn.classList.add('active', 'bg-dark-800', 'text-line');
+      activeBtn.classList.remove('text-gray-400');
+    }
+
+    // Handover Takeover Logic
+    let isHumanMode = false;
+    function toggleTakeover() {
+      isHumanMode = !isHumanMode;
+      const btn = document.getElementById('takeover-btn');
+      const btnText = document.getElementById('takeover-btn-text');
+      const modeText = document.getElementById('mode-status-text');
+      const inputField = document.getElementById('admin-input-field');
+      const sendBtn = document.getElementById('send-btn');
+
+      if (isHumanMode) {
+        btn.classList.remove('bg-red-600', 'hover:bg-red-700');
+        btn.classList.add('bg-line', 'hover:bg-line-hover');
+        btnText.innerText = 'คืนงานให้ AI ตอบต่อ (Auto-Reply)';
+        modeText.innerText = 'กำลังควบคุมโดยแอดมิน';
+        modeText.className = 'text-xs text-line font-bold';
+        inputField.disabled = false;
+        sendBtn.disabled = false;
+        inputField.focus();
+      } else {
+        btn.classList.remove('bg-line', 'hover:bg-line-hover');
+        btn.classList.add('bg-red-600', 'hover:bg-red-700');
+        btnText.innerText = 'ดึงเคสมาตอบเอง (Human Control)';
+        modeText.innerText = 'รอแอดมินแทรกแซง';
+        modeText.className = 'text-xs text-amber-400';
+        inputField.disabled = true;
+        sendBtn.disabled = true;
+      }
+    }
+
+    function sendAdminMessage() {
+      const input = document.getElementById('admin-input-field');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      const container = document.getElementById('chat-messages-container');
+      const msgHtml = `
+        <div class="flex items-start gap-2 justify-start flex-row-reverse">
+          <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+            แอด
+          </div>
+          <div class="flex flex-col items-end">
+            <div class="bg-blue-600 text-white p-3 max-w-md text-xs rounded-2xl rounded-tr-none shadow">
+              ${msg}
+            </div>
+            <span class="text-[10px] text-gray-500 mt-1">แอดมินส่งแล้ว • เมื่อสักครู่</span>
+          </div>
+        </div>
+      `;
+      container.insertAdjacentHTML('beforeend', msgHtml);
+      input.value = '';
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Modal Helpers
+    function openTestModal() {
+      document.getElementById('testModal').classList.remove('hidden');
+    }
+    function closeTestModal() {
+      document.getElementById('testModal').classList.add('hidden');
+    }
+
+    function runAiTest(e) {
+      e.preventDefault();
+      const input = document.getElementById('test-input');
+      const val = input.value.trim();
+      if (!val) return;
+
+      const box = document.getElementById('test-chat-box');
+      
+      // User bubble
+      box.insertAdjacentHTML('beforeend', `
+        <div class="flex justify-end">
+          <div class="bg-line text-white p-2.5 rounded-xl text-xs max-w-xs">${val}</div>
+        </div>
+      `);
+
+      input.value = '';
+      box.scrollTop = box.scrollHeight;
+
+      // Simulated AI Delay & Reply
+      setTimeout(() => {
+        let aiReply = "น้องการ์ตูนยินดีให้บริการค่ะ ทางเรามีบริการจัดส่งด่วนทั่วประเทศ เริ่มต้นเพียง 490 บาทเท่านั้นค่ะ 😊";
+        if (val.includes("ส่ง") || val.includes("กี่วัน")) {
+          aiReply = "สินค้าจัดส่งโดย Flash Express ใช้เวลา 1-2 วันทำการ ค่าบริการเหมาจ่าย 50 บาทค่ะ!";
+        }
+        box.insertAdjacentHTML('beforeend', `
+          <div class="flex justify-start items-start gap-2">
+            <div class="w-6 h-6 rounded-full bg-line text-white flex items-center justify-center text-[10px] font-bold">AI</div>
+            <div class="bg-dark-800 border border-gray-700 text-gray-200 p-2.5 rounded-xl text-xs max-w-xs space-y-1">
+              <p>${aiReply}</p>
+              <span class="text-[9px] text-emerald-400 block font-mono">Matched RAG Chunk #092 (Score: 0.94)</span>
+            </div>
+          </div>
+        `);
+        box.scrollTop = box.scrollHeight;
+      }, 600);
+    }
+
+    // Knowledge Base Handlers
+    function openAddKnowledgeModal() {
+      document.getElementById('addKnowledgeModal').classList.remove('hidden');
+    }
+    function closeAddKnowledgeModal() {
+      document.getElementById('addKnowledgeModal').classList.add('hidden');
+    }
+
+    function saveNewKnowledge() {
+      const cat = document.getElementById('new-category').value;
+      const kw = document.getElementById('new-keywords').value;
+      const ans = document.getElementById('new-answer').value;
+
+      if (!cat || !kw || !ans) {
+        alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+        return;
+      }
+
+      const tbody = document.getElementById('kb-table-body');
+      const tr = document.createElement('tr');
+      tr.className = 'hover:bg-dark-800/50 transition';
+      tr.innerHTML = `
+        <td class="p-4">
+          <span class="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-full text-[10px] font-medium">
+            ${cat}
+          </span>
+        </td>
+        <td class="p-4 font-medium text-gray-200">${kw}</td>
+        <td class="p-4 text-gray-300 max-w-xs truncate">${ans}</td>
+        <td class="p-4 text-center font-bold text-gray-300">0 ครั้ง</td>
+        <td class="p-4 text-right space-x-2">
+          <button class="text-gray-400 hover:text-line transition"><i class="fa-solid fa-pen-to-square"></i></button>
+          <button onclick="deleteKnowledge(this)" class="text-gray-400 hover:text-red-400 transition"><i class="fa-solid fa-trash"></i></button>
+        </td>
+      `;
+      tbody.prepend(tr);
+      closeAddKnowledgeModal();
+    }
+
+    function deleteKnowledge(btn) {
+      if (confirm('คุณต้องการลบข้อมูล RAG นี้หรือไม่?')) {
+        btn.closest('tr').remove();
+      }
+    }
+
+    function filterKnowledge() {
+      const query = document.getElementById('kb-search-input').value.toLowerCase();
+      const rows = document.querySelectorAll('#kb-table-body tr');
+      rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+      });
+    }
+
+    function syncKnowledge() {
+      const icon = document.getElementById('syncIcon');
+      icon.classList.add('fa-spin');
+      setTimeout(() => {
+        icon.classList.remove('fa-spin');
+        alert('ซิงค์ข้อมูล Knowledge Base เข้าสู่ Vector Database เรียบร้อยแล้ว!');
+      }, 1000);
+    }
+
+    function exportReport() {
+      alert('กำลังส่งออกรายงาน Analytics (.CSV)...');
+    }
+
+    function savePromptSettings() {
+      alert('บันทึกการตั้งค่า System Prompt และ Rules เรียบร้อยแล้ว!');
+    }
+
+    // Chart.js Setup
+    window.onload = function() {
+      checkAuthStatus();
+
+      const ctx = document.getElementById('peakHoursChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'],
+          datasets: [{
+            label: 'จำนวนแชท',
+            data: [120, 240, 580, 310, 290, 420, 650, 230],
+            borderColor: '#06C755',
+            backgroundColor: 'rgba(6, 199, 85, 0.1)',
+            fill: true,
+            tension: 0.4,
+            pointBackgroundColor: '#06C755',
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              grid: { color: '#21262d' },
+              ticks: { color: '#8b949e', font: { size: 10 } }
+            },
+            y: {
+              grid: { color: '#21262d' },
+              ticks: { color: '#8b949e', font: { size: 10 } }
+            }
+          }
+        }
+      });
+    };
+  </script>
 </body>
 </html>
