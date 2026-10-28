@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard - LINE AI Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <nav class="bg-white shadow px-6 py-4 flex justify-between items-center">
+        <h1 class="text-xl font-bold text-gray-800">📊 LINE AI Admin Dashboard</h1>
+        <button onclick="logout()" class="bg-red-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-600">ออกจากระบบ</button>
+    </nav>
+    <div class="max-w-6xl mx-auto mt-8 px-4">
+        <div class="bg-white rounded-xl shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-2 text-gray-700">สถานะระบบ</h2>
+            <p class="text-green-600 font-medium">🟢 เชื่อมต่อกับ Vercel Serverless และ Google Gemini API เรียบร้อย</p>
+        </div>
+        <div class="bg-white rounded-xl shadow p-6">
+            <h2 class="text-lg font-semibold mb-4 text-gray-700">💬 ประวัติการสนทนากับ AI ล่าสุด</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100 text-gray-600 text-sm">
+                            <th class="p-3 border-b">เวลา</th>
+                            <th class="p-3 border-b">LINE User ID</th>
+                            <th class="p-3 border-b">ข้อความลูกค้า</th>
+                            <th class="p-3 border-b">คำตอบจาก Gemini AI</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-rows" class="text-sm text-gray-700">
+                        <tr><td colspan="4" class="p-4 text-center text-gray-400">กำลังโหลดข้อมูล...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script>
+        if(localStorage.getItem('logged_in') !== 'true') { window.location.href = '/index.html'; }
+        function logout() { localStorage.removeItem('logged_in'); window.location.href = '/index.html'; }
+
+        async function fetchLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const logs = await res.json();
+                const tbody = document.getElementById('log-rows');
+                if(logs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-gray-400">ยังไม่มีประวัติการสนทนา</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = logs.map(l => `
+                    <tr class="hover:bg-gray-50">
+                        <td class="p-3 border-b text-xs text-gray-500">${new Date(l.created_at).toLocaleString()}</td>
+                        <td class="p-3 border-b font-mono text-xs">${l.line_user_id}</td>
+                        <td class="p-3 border-b">${l.user_message}</td>
+                        <td class="p-3 border-b text-blue-600">${l.ai_response}</td>
+                    </tr>
+                `).join('');
+            } catch (err) { console.error(err); }
+        }
+        fetchLogs();
+    </script>
+</body>
+</html>
